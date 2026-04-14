@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-and-test:
+    name: Lint + Unit Tests
+    runs-on: self-hosted   # your local GitHub Actions runner
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Lint with flake8
+        run: |
+          flake8 scripts/ dags/ tests/ \
+            --max-line-length=120 \
+            --extend-ignore=E203,W503 \
+            --exclude=__pycache__
+
+      - name: Run unit tests
+        run: |
+          pytest tests/ \
+            -v \
+            --cov=scripts \
+            --cov-report=term-missing \
+            --cov-fail-under=70
+
+      - name: Validate DAG structure (import check)
+        env:
+          AIRFLOW__CORE__EXECUTOR: LocalExecutor
+          AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: sqlite:////tmp/airflow_ci.db
+          AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+        run: |
+          pip install apache-airflow==2.8.0 --quiet
+          airflow db migrate --quiet
+          python -c "
+          import sys, os
+          sys.path.insert(0, '.')
+          # Mock DB calls so DAG import doesn't need a real DB
+          import unittest.mock as mock
+          with mock.patch('scripts.extract.run_extract'), \
+               mock.patch('scripts.transform.run_transform'), \
+               mock.patch('scripts.load.run_load'):
+              from dags.etl_pipeline import dag
+              assert dag.dag_id == 'ecommerce_etl', 'DAG id mismatch'
+              task_ids = {t.task_id for t in dag.tasks}
+              assert 'extract_to_bronze'   in task_ids
+              assert 'transform_to_silver' in task_ids
+              assert 'load_to_gold'        in task_ids
+              print('DAG validation passed. Tasks:', task_ids)
+          "
+
+  docker-compose-validate:
+    name: Validate docker-compose syntax
+    runs-on: self-hosted
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate docker-compose.yml
+        run: docker compose config --quiet

@@ -1,0 +1,32 @@
+# Environment
+.env
+*.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+build/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Data files (generated - do not commit)
+data/raw/*.csv
+data/raw/*.json
+data/processed/
+
+# Airflow
+logs/
+airflow.db
+airflow.cfg
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Docker volumes
+postgres_data/
