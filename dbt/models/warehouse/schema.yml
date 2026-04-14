@@ -1,0 +1,70 @@
+version: 2
+
+models:
+  - name: dim_date
+    description: "Date dimension covering 2020-2026, generated via generate_series"
+    columns:
+      - name: date_key
+        description: "Integer surrogate key in YYYYMMDD format"
+        tests: [not_null, unique]
+      - name: full_date
+        tests: [not_null]
+      - name: is_weekend
+        tests: [not_null]
+
+  - name: dim_customer
+    description: "Customer dimension — SCD Type 1"
+    columns:
+      - name: customer_key
+        tests: [not_null, unique]
+      - name: customer_id
+        tests: [not_null, unique]
+      - name: state
+        tests: [not_null]
+
+  - name: dim_product
+    description: "Product dimension — SCD Type 1"
+    columns:
+      - name: product_key
+        tests: [not_null, unique]
+      - name: category
+        tests: [not_null]
+
+  - name: dim_seller
+    description: "Seller dimension — SCD Type 1"
+    columns:
+      - name: seller_key
+        tests: [not_null, unique]
+
+  - name: fact_order_items
+    description: "Fact table — grain: one row per order line item"
+    columns:
+      - name: order_id
+        tests: [not_null]
+      - name: order_item_id
+        tests: [not_null]
+      - name: customer_key
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_customer')
+              field: customer_key
+      - name: product_key
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_product')
+              field: product_key
+      - name: seller_key
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_seller')
+              field: seller_key
+      - name: price
+        tests: [not_null]
+      - name: order_status
+        tests:
+          - accepted_values:
+              values: ['delivered', 'shipped', 'processing',
+                       'canceled', 'invoiced', 'unknown', 'unavailable']

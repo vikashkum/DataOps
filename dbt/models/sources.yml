@@ -1,0 +1,67 @@
+version: 2
+
+sources:
+  - name: silver
+    description: "Silver layer — cleaned and validated data produced by scripts/transform.py"
+    schema: staging
+    tables:
+      - name: customers
+        description: "Deduplicated, normalised customer records"
+        columns:
+          - name: customer_id
+            tests: [not_null, unique]
+          - name: state
+            tests: [not_null]
+
+      - name: sellers
+        description: "Seller master data"
+        columns:
+          - name: seller_id
+            tests: [not_null, unique]
+
+      - name: products
+        description: "Product catalogue with normalised categories"
+        columns:
+          - name: product_id
+            tests: [not_null, unique]
+          - name: category
+            tests: [not_null]
+
+      - name: orders
+        description: "Order header with delivery metrics"
+        columns:
+          - name: order_id
+            tests: [not_null, unique]
+          - name: customer_id
+            tests: [not_null]
+          - name: status
+            tests:
+              - accepted_values:
+                  values: ['delivered', 'shipped', 'processing',
+                           'canceled', 'invoiced', 'unknown', 'unavailable']
+
+      - name: order_items
+        description: "Order line items with price and freight"
+        columns:
+          - name: order_id
+            tests: [not_null]
+          - name: price
+            tests: [not_null]
+
+      - name: order_payments
+        description: "Payment records per order"
+        columns:
+          - name: order_id
+            tests: [not_null]
+          - name: payment_value
+            tests: [not_null]
+
+      - name: order_reviews
+        description: "Customer review scores and comments"
+        columns:
+          - name: review_id
+            tests: [not_null, unique]
+          - name: score
+            tests:
+              - accepted_values:
+                  values: [1, 2, 3, 4, 5]

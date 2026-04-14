@@ -1,0 +1,12 @@
+dataops:
+  target: prod
+  outputs:
+    prod:
+      type: postgres
+      host: "{{ env_var('DATAOPS_DB_HOST', 'localhost') }}"
+      port: "{{ env_var('DATAOPS_DB_PORT', '5432') | int }}"
+      dbname: "{{ env_var('DATAOPS_DB_NAME', 'dataops') }}"
+      user: "{{ env_var('DATAOPS_DB_USER', 'dataops') }}"
+      password: "{{ env_var('DATAOPS_DB_PASSWORD', 'dataops') }}"
+      schema: warehouse
+      threads: 4

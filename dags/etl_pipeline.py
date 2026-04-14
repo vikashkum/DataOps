@@ -1,9 +1,17 @@
 """
-etl_pipeline.py  —  Airflow DAG
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-Orchestrates the nightly e-commerce ETL:
+etl_pipeline.py  —  Airflow DAG  (Enhancement 01: dbt Gold layer)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Pipeline:
 
-    extract_to_bronze  →  transform_to_silver  →  load_to_gold
+    check_source_files
+          ↓
+    extract_to_bronze      CSV → raw.*
+          ↓
+    transform_to_silver    raw.* → staging.*  (Python / Pandas)
+          ↓
+    dbt_run_gold           staging.* → warehouse.*  (dbt models)
+          ↓
+    dbt_test_gold          run dbt tests on warehouse.*
 
 Schedule:  daily at midnight UTC
 Retries:   2 (5-minute delay)
@@ -17,12 +25,14 @@ from airflow import DAG
 from airflow.operators.python import PythonOperator
 from airflow.operators.bash import BashOperator
 
-# Make project scripts importable inside the container
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from scripts.extract import run_extract      # noqa: E402
 from scripts.transform import run_transform  # noqa: E402
-from scripts.load import run_load            # noqa: E402
+
+DBT_DIR = "/opt/airflow/dbt"
+DBT_CMD = f"cd {DBT_DIR} && dbt"
+DBT_FLAGS = f"--profiles-dir {DBT_DIR} --target prod"
 
 default_args = {
     "owner": "dataops",
@@ -36,20 +46,21 @@ default_args = {
 with DAG(
     dag_id="ecommerce_etl",
     default_args=default_args,
-    description="E-commerce ETL: CSV → Bronze → Silver → Gold",
+    description="E-commerce ETL: CSV → Bronze → Silver → Gold (dbt)",
     schedule="@daily",
     start_date=datetime(2024, 1, 1),
     catchup=False,
-    tags=["ecommerce", "etl", "portfolio"],
+    tags=["ecommerce", "etl", "dbt", "portfolio"],
     doc_md="""
 ## E-Commerce ETL Pipeline
 
-| Layer   | Schema     | Description                        |
-|---------|------------|------------------------------------|
-| Bronze  | raw        | Exact copy of source CSV data      |
-| Silver  | staging    | Cleaned, typed, de-duplicated      |
-| Gold    | warehouse  | Star schema ready for BI queries   |
+| Layer  | Tool        | Schema     | Description                      |
+|--------|-------------|------------|----------------------------------|
+| Bronze | Python      | raw        | Exact copy of source CSV data    |
+| Silver | Python      | staging    | Cleaned, typed, de-duplicated    |
+| Gold   | **dbt**     | warehouse  | Star schema — dim_* + fact_*     |
 
+**dbt docs:** `dbt docs serve` inside the container
 **Dashboard:** http://localhost:3000  (Metabase)
 """,
 ) as dag:
@@ -64,26 +75,33 @@ with DAG(
         ),
     )
 
-    # ── Task 1: Bronze layer ────────────────────────────────────────────
+    # ── Task 1: Bronze layer ─────────────────────────────────────────────
     extract = PythonOperator(
         task_id="extract_to_bronze",
         python_callable=run_extract,
         doc_md="Load raw CSVs → raw.* schema (incremental, idempotent).",
     )
 
-    # ── Task 2: Silver layer ────────────────────────────────────────────
+    # ── Task 2: Silver layer ─────────────────────────────────────────────
     transform = PythonOperator(
         task_id="transform_to_silver",
         python_callable=run_transform,
         doc_md="Clean + validate raw data → staging.* schema.",
     )
 
-    # ── Task 3: Gold layer ──────────────────────────────────────────────
-    load = PythonOperator(
-        task_id="load_to_gold",
-        python_callable=run_load,
-        doc_md="Build star schema → warehouse.* (dim_* + fact_order_items).",
+    # ── Task 3: Gold layer via dbt ───────────────────────────────────────
+    dbt_run = BashOperator(
+        task_id="dbt_run_gold",
+        bash_command=f"{DBT_CMD} run {DBT_FLAGS}",
+        doc_md="Build warehouse.* star schema using dbt models.",
     )
 
-    # ── DAG dependency chain ────────────────────────────────────────────
-    check_source >> extract >> transform >> load
+    # ── Task 4: dbt data quality tests ───────────────────────────────────
+    dbt_test = BashOperator(
+        task_id="dbt_test_gold",
+        bash_command=f"{DBT_CMD} test {DBT_FLAGS}",
+        doc_md="Run dbt tests: not_null, unique, accepted_values, relationships.",
+    )
+
+    # ── DAG dependency chain ─────────────────────────────────────────────
+    check_source >> extract >> transform >> dbt_run >> dbt_test

@@ -24,6 +24,7 @@ x-airflow-common: &airflow-common
     - ./scripts:/opt/airflow/scripts
     - ./sql:/opt/airflow/sql
     - ./data:/opt/airflow/data
+    - ./dbt:/opt/airflow/dbt
     - airflow_logs:/opt/airflow/logs
   depends_on:
     postgres:
