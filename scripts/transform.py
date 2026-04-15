@@ -119,6 +119,9 @@ def transform_order_items(df: pd.DataFrame) -> pd.DataFrame:
     df = df[df["freight_value"] >= 0]
     df = df.dropna(subset=["order_item_id", "price", "freight_value"])
 
+    # Deduplicate: raw table may have duplicate rows from multiple pipeline runs
+    df = df.drop_duplicates(subset=["order_id", "order_item_id"])
+
     return df[["order_id", "order_item_id", "product_id", "seller_id",
                "shipping_limit", "price", "freight_value"]].copy()
 

@@ -30,3 +30,9 @@ airflow.cfg
 
 # Docker volumes
 postgres_data/
+
+# dbt generated files (do not commit)
+dbt/target/
+dbt/.user.yml
+dbt/run_results.json
+dbt/logs/
